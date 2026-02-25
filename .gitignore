@@ -1,0 +1,13 @@
+# OCR cache (may contain sensitive text from your images)
+.ocr_cache.json
+
+# macOS
+.DS_Store
+
+# Results folders
+image_search_results/
+
+# Swift build artifacts
+.build/
+*.o
+*.swp
