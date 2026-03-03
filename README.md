@@ -119,7 +119,7 @@ No `brew install`. No `pip install`. No `npm install`. Just `swift` — which is
                     └──────────────────┘     └────────────────┘
 ```
 
-1. **Scan** — Collects all image files (PNG, JPG, JPEG, HEIC, TIFF, BMP, GIF, WEBP) from the target directory + one level of subdirectories
+1. **Scan** — Collects all image files (PNG, JPG, JPEG, HEIC, TIFF, BMP, GIF, WEBP) from the target directories + one level of subdirectories
 2. **OCR** — Runs macOS Vision text recognition in parallel across all CPU cores
 3. **Cache** — Saves recognized text to a JSON file. Only new/modified files get re-OCR'd
 4. **Search** — Case-insensitive text matching against the cached OCR results
@@ -153,28 +153,49 @@ The script uses **only frameworks built into macOS**. Nothing to install, nothin
 swift image_search.swift [OPTIONS] <term1> [term2] ...
 ```
 
+**Input Folders:**
+
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--dir <path>` | Directory to scan | `~/Desktop/Screenshots` |
-| `--cache <path>` | Cache file location | `.ocr_cache.json` in search dir |
+| `--dir <path>` | Directory to scan (can be specified multiple times) | `~/Desktop/Screenshots` |
+| `--all` | Scan all common locations (Desktop/Screenshots, Desktop, Downloads, Documents, Pictures) | Off |
+
+> **Tip:** For faster, more targeted scans, use `--dir` with specific folders rather than `--all`.
+
+**Search & Output:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
 | `--match-all` | Require ALL terms to match | Match ANY term |
 | `--open` | Open results folder in Finder | Off |
+| `--no-results-dir` | Don't create results folder | Off |
+
+**Performance:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--cache <path>` | Cache file location | Auto (per-dir or shared) |
 | `--rebuild` | Force re-OCR all images | Off |
 | `--fast` | Fast OCR mode (~3x faster, less accurate) | Off |
 | `--no-cache` | Disable caching | Off |
-| `--no-results-dir` | Don't create results folder | Off |
 | `--help` | Show help | |
 
 ## Examples
 
 ```bash
-# Find screenshots containing an error message
+# Search default screenshots folder
 swift image_search.swift "connection refused"
 
-# Find receipts or invoices in Downloads
+# Search a specific folder
 swift image_search.swift --dir ~/Downloads "receipt" "invoice"
 
-# Find screenshots with both a name AND a project
+# Search multiple folders at once
+swift image_search.swift --dir ~/Downloads --dir ~/Desktop "quarterly report"
+
+# Search all common locations (Desktop, Downloads, Documents, Pictures)
+swift image_search.swift --all "meeting notes"
+
+# Require ALL terms to match
 swift image_search.swift --match-all "Alice" "Project Alpha"
 
 # Fast initial scan of a large folder
@@ -202,10 +223,17 @@ The OCR cache (`.ocr_cache.json`) maps each file to its recognized text and last
 
 ## Security & Privacy
 
-- **100% local.** No data leaves your machine. No cloud APIs. No network calls.
-- **Read-only.** Never modifies, moves, or deletes your images. Only writes the cache file and symlinks.
-- **Zero dependencies.** Nothing to install. Nothing to audit except one Swift file.
-- **Cache contains OCR text.** Add `.ocr_cache.json` to `.gitignore` if your images contain sensitive content.
+This script is **100% local**. It makes **zero network calls**. No data is uploaded, transmitted, or shared — ever.
+
+| Guarantee | Details |
+|-----------|---------|
+| **No network access** | Zero HTTP requests, zero sockets, zero DNS lookups. The script imports only `Vision`, `AppKit`, and `Foundation` — no networking frameworks. |
+| **Read-only on your images** | Never modifies, moves, or deletes your files. Only writes a local JSON cache and symlinks. |
+| **Nothing to install** | Zero third-party dependencies. Only macOS built-in frameworks. Nothing to audit except one Swift file. |
+| **No telemetry** | No analytics, no tracking, no crash reporting. |
+| **Cache is local** | OCR text is cached in a local JSON file. Add `.ocr_cache.json` to `.gitignore` if your images contain sensitive content. |
+
+You can verify this yourself — the entire tool is a single readable Swift file.
 
 ## License
 

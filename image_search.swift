@@ -14,8 +14,9 @@
 //   swift image_search.swift [OPTIONS] <term1> [term2] ...
 //
 // Options:
-//   --dir <path>      Directory to scan (default: ~/Desktop/Screenshots)
-//   --cache <path>    Cache file location (default: ./.ocr_cache.json)
+//   --dir <path>      Directory to scan (can be specified multiple times)
+//   --all             Scan all common image locations (Desktop, Downloads, Documents, Pictures)
+//   --cache <path>    Cache file location (default: ~/.mac-image-search-cache.json)
 //   --match-all       Require ALL search terms to match (default: ANY)
 //   --open            Open results folder in Finder after search
 //   --rebuild         Force rebuild the OCR cache
@@ -23,10 +24,16 @@
 //   --no-cache        Disable caching entirely
 //   --no-results-dir  Don't create a results folder with symlinks
 //
+// Security:
+//   This script is 100% local. It makes ZERO network calls. No data is uploaded,
+//   transmitted, or shared. All OCR processing happens on-device using Apple's
+//   Vision framework. The only files written are a local JSON cache and symlinks.
+//
 // Examples:
 //   swift image_search.swift "error"
+//   swift image_search.swift --dir ~/Downloads --dir ~/Desktop "receipt"
+//   swift image_search.swift --all "meeting notes"
 //   swift image_search.swift --match-all "invoice" "2024"
-//   swift image_search.swift --dir ~/Downloads --open "receipt"
 //   swift image_search.swift --fast --rebuild "login"
 
 import Vision
@@ -37,10 +44,22 @@ import Foundation
 
 let supportedExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tiff", "tif", "bmp", "gif", "webp"]
 
+let homeDir = NSString(string: "~").expandingTildeInPath
+
+// Common image locations for --all mode
+let allDirs: [String] = [
+    "~/Desktop/Screenshots",
+    "~/Desktop",
+    "~/Downloads",
+    "~/Documents",
+    "~/Pictures",
+].map { NSString(string: $0).expandingTildeInPath }
+
 // MARK: - Argument Parsing
 
 var args = Array(CommandLine.arguments.dropFirst())
-var searchDir = NSString(string: "~/Desktop/Screenshots").expandingTildeInPath
+var searchDirs: [String] = []
+var scanAll = false
 var cachePathOverride: String? = nil
 var matchAll = false
 var openFolder = false
@@ -56,8 +75,10 @@ while i < args.count {
     case "--dir":
         i += 1
         if i < args.count {
-            searchDir = NSString(string: args[i]).expandingTildeInPath
+            searchDirs.append(NSString(string: args[i]).expandingTildeInPath)
         }
+    case "--all":
+        scanAll = true
     case "--cache":
         i += 1
         if i < args.count {
@@ -81,23 +102,38 @@ while i < args.count {
 
         Usage: swift image_search.swift [OPTIONS] <term1> [term2] ...
 
-        Options:
-          --dir <path>      Directory to scan (default: ~/Desktop/Screenshots)
-          --cache <path>    Cache file location (default: ./.ocr_cache.json)
+        Input Folders:
+          --dir <path>      Directory to scan (can be specified multiple times)
+          --all             Scan all common locations:
+                              ~/Desktop/Screenshots, ~/Desktop, ~/Downloads,
+                              ~/Documents, ~/Pictures
+
+          If no --dir or --all is specified, defaults to ~/Desktop/Screenshots.
+          For large folders, prefer --dir with specific paths for faster scans.
+
+        Search Options:
           --match-all       Require ALL terms to match (default: ANY)
           --open            Open results folder in Finder
+
+        Performance:
+          --cache <path>    Cache file location (default: ~/.mac-image-search-cache.json)
           --rebuild         Force rebuild the OCR cache
           --fast            Use fast OCR (~3x faster, slightly less accurate)
           --no-cache        Disable caching entirely
+
+        Output:
           --no-results-dir  Don't create a results folder with symlinks
           --help, -h        Show this help message
 
         Supported formats: PNG, JPG, JPEG, HEIC, TIFF, BMP, GIF, WEBP
 
+        Security: 100% local. Zero network calls. No data leaves your machine.
+
         Examples:
           swift image_search.swift "error message"
+          swift image_search.swift --dir ~/Downloads --dir ~/Desktop "receipt"
+          swift image_search.swift --all "quarterly report"
           swift image_search.swift --match-all "invoice" "2024"
-          swift image_search.swift --dir ~/Downloads --open "receipt"
         """)
         exit(0)
     default:
@@ -116,10 +152,38 @@ guard !searchTerms.isEmpty else {
     exit(1)
 }
 
-// Validate search directory exists
-var isDirFlag: ObjCBool = false
-guard FileManager.default.fileExists(atPath: searchDir, isDirectory: &isDirFlag), isDirFlag.boolValue else {
-    print("ERROR: Directory does not exist: \(searchDir)")
+// Resolve which directories to scan
+if scanAll {
+    for dir in allDirs {
+        if !searchDirs.contains(dir) {
+            searchDirs.append(dir)
+        }
+    }
+}
+
+if searchDirs.isEmpty {
+    searchDirs = [NSString(string: "~/Desktop/Screenshots").expandingTildeInPath]
+}
+
+// Validate and deduplicate directories
+var validDirs: [String] = []
+var seenDirs: Set<String> = []
+for dir in searchDirs {
+    // Resolve symlinks and standardize path
+    let resolved = (dir as NSString).standardizingPath
+    guard !seenDirs.contains(resolved) else { continue }
+    seenDirs.insert(resolved)
+
+    var isDirFlag: ObjCBool = false
+    if FileManager.default.fileExists(atPath: dir, isDirectory: &isDirFlag), isDirFlag.boolValue {
+        validDirs.append(dir)
+    } else {
+        print("WARNING: Skipping directory (does not exist): \(dir)")
+    }
+}
+
+guard !validDirs.isEmpty else {
+    print("ERROR: No valid directories to scan.")
     exit(1)
 }
 
@@ -127,7 +191,14 @@ let fileManager = FileManager.default
 
 // MARK: - Cache
 
-let cachePath = cachePathOverride ?? (searchDir as NSString).appendingPathComponent(".ocr_cache.json")
+// When scanning multiple dirs, use a shared cache in the home directory
+let defaultCachePath: String
+if validDirs.count == 1 {
+    defaultCachePath = (validDirs[0] as NSString).appendingPathComponent(".ocr_cache.json")
+} else {
+    defaultCachePath = (homeDir as NSString).appendingPathComponent(".mac-image-search-cache.json")
+}
+let cachePath = cachePathOverride ?? defaultCachePath
 
 struct CacheEntry: Codable {
     let text: String
@@ -157,28 +228,34 @@ func collectImages(in dir: String) {
     }
 }
 
-// Scan top-level dir + one level of subdirectories (skip results folder)
-collectImages(in: searchDir)
-if let topLevel = try? fileManager.contentsOfDirectory(atPath: searchDir) {
-    for item in topLevel {
-        if item == resultsSubdir { continue }
-        let fullPath = (searchDir as NSString).appendingPathComponent(item)
-        var isSubDir: ObjCBool = false
-        if fileManager.fileExists(atPath: fullPath, isDirectory: &isSubDir), isSubDir.boolValue {
-            collectImages(in: fullPath)
+// Scan each directory + one level of subdirectories (skip results folders)
+for dir in validDirs {
+    collectImages(in: dir)
+    if let topLevel = try? fileManager.contentsOfDirectory(atPath: dir) {
+        for item in topLevel {
+            if item == resultsSubdir { continue }
+            let fullPath = (dir as NSString).appendingPathComponent(item)
+            var isSubDir: ObjCBool = false
+            if fileManager.fileExists(atPath: fullPath, isDirectory: &isSubDir), isSubDir.boolValue {
+                collectImages(in: fullPath)
+            }
         }
     }
 }
 
 guard !allImageFiles.isEmpty else {
-    print("No images found in: \(searchDir)")
+    let dirList = validDirs.joined(separator: ", ")
+    print("No images found in: \(dirList)")
     exit(0)
 }
 
 let matchMode = matchAll ? "ALL" : "ANY"
 print("Search terms: \(searchTerms.joined(separator: ", "))")
 print("Match mode: \(matchMode)")
-print("Directory: \(searchDir)")
+print("Directories: \(validDirs.count)")
+for dir in validDirs {
+    print("  - \(dir)")
+}
 print("Total images: \(allImageFiles.count)")
 
 // MARK: - Determine Cache Hits vs Misses
@@ -319,7 +396,10 @@ if !allMatches.isEmpty && !disableResultsDir {
         .replacingOccurrences(of: "/", with: "-")
         .replacingOccurrences(of: ":", with: "-")
         .replacingOccurrences(of: ".", with: "-")
-    let resultsDir = (searchDir as NSString).appendingPathComponent("\(resultsSubdir)/\(sanitizedSearch)")
+
+    // Place results in the first search directory
+    let resultsBase = validDirs[0]
+    let resultsDir = (resultsBase as NSString).appendingPathComponent("\(resultsSubdir)/\(sanitizedSearch)")
 
     try? fileManager.removeItem(atPath: resultsDir)
     try? fileManager.createDirectory(atPath: resultsDir, withIntermediateDirectories: true)
