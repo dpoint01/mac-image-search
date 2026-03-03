@@ -22,6 +22,7 @@
 //   --rebuild         Force rebuild the OCR cache
 //   --fast            Use fast OCR (~3x faster, slightly less accurate)
 //   --no-cache        Disable caching entirely
+//   --results-dir <p> Custom results folder location (default: <search-dir>/image_search_results/)
 //   --no-results-dir  Don't create a results folder with symlinks
 //
 // Security:
@@ -67,6 +68,7 @@ var rebuildCache = false
 var useFastOCR = false
 var disableCache = false
 var disableResultsDir = false
+var resultsDirOverride: String? = nil
 var searchTerms: [String] = []
 
 var i = 0
@@ -94,6 +96,11 @@ while i < args.count {
         useFastOCR = true
     case "--no-cache":
         disableCache = true
+    case "--results-dir":
+        i += 1
+        if i < args.count {
+            resultsDirOverride = NSString(string: args[i]).expandingTildeInPath
+        }
     case "--no-results-dir":
         disableResultsDir = true
     case "--help", "-h":
@@ -122,6 +129,7 @@ while i < args.count {
           --no-cache        Disable caching entirely
 
         Output:
+          --results-dir <p> Custom results folder (default: <search-dir>/image_search_results/)
           --no-results-dir  Don't create a results folder with symlinks
           --help, -h        Show this help message
 
@@ -397,9 +405,14 @@ if !allMatches.isEmpty && !disableResultsDir {
         .replacingOccurrences(of: ":", with: "-")
         .replacingOccurrences(of: ".", with: "-")
 
-    // Place results in the first search directory
-    let resultsBase = validDirs[0]
-    let resultsDir = (resultsBase as NSString).appendingPathComponent("\(resultsSubdir)/\(sanitizedSearch)")
+    // Place results in custom dir, or default to first search directory
+    let resultsBase = resultsDirOverride ?? validDirs[0]
+    let resultsDir: String
+    if resultsDirOverride != nil {
+        resultsDir = (resultsBase as NSString).appendingPathComponent(sanitizedSearch)
+    } else {
+        resultsDir = (resultsBase as NSString).appendingPathComponent("\(resultsSubdir)/\(sanitizedSearch)")
+    }
 
     try? fileManager.removeItem(atPath: resultsDir)
     try? fileManager.createDirectory(atPath: resultsDir, withIntermediateDirectories: true)

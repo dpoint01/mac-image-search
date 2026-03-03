@@ -85,6 +85,8 @@ Then in Claude Code:
 > /image-search quarterly report
 ```
 
+Matching images are symlinked into a **results folder** (inside your search directory by default) so you can browse them in Finder.
+
 To auto-approve (no confirmation prompts), add to `~/.claude/settings.local.json` under `permissions.allow`:
 ```json
 "Bash(swift ~/.claude/skills/image-search/scripts/image_search.swift:*)"
@@ -101,6 +103,8 @@ swift image_search.swift "your search term"
 ```
 
 No `brew install`. No `pip install`. No `npm install`. Just `swift` — which is already on your Mac.
+
+Matching images are symlinked into a **results folder** (inside your search directory by default), so you can browse them in Finder. Use `--results-dir` to save results elsewhere, or `--open` to open the folder automatically.
 
 ---
 
@@ -123,7 +127,7 @@ No `brew install`. No `pip install`. No `npm install`. Just `swift` — which is
 2. **OCR** — Runs macOS Vision text recognition in parallel across all CPU cores
 3. **Cache** — Saves recognized text to a JSON file. Only new/modified files get re-OCR'd
 4. **Search** — Case-insensitive text matching against the cached OCR results
-5. **Results** — Creates a folder with symlinks to matching files for easy browsing in Finder
+5. **Results** — Creates a folder with symlinks to matching files for easy browsing in Finder (customizable with `--results-dir`)
 
 ### Performance
 
@@ -167,6 +171,7 @@ swift image_search.swift [OPTIONS] <term1> [term2] ...
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--match-all` | Require ALL terms to match | Match ANY term |
+| `--results-dir <path>` | Custom destination for results folder | `<search-dir>/image_search_results/` |
 | `--open` | Open results folder in Finder | Off |
 | `--no-results-dir` | Don't create results folder | Off |
 
@@ -204,9 +209,40 @@ swift image_search.swift --fast --dir ~/Pictures "vacation"
 # Re-index everything (useful if you edited images)
 swift image_search.swift --rebuild "quarterly report"
 
-# Search without leaving files behind
+# Save results to a custom folder
+swift image_search.swift --results-dir ~/Desktop/found "password reset"
+
+# Search without creating a results folder
 swift image_search.swift --no-results-dir --no-cache "password reset"
 ```
+
+## Results Folder
+
+Every search automatically creates a **results folder** containing symlinks to the matching images. This lets you browse results in Finder without copying or moving any files.
+
+```
+~/Desktop/Screenshots/
+└── image_search_results/
+    └── meeting_notes/
+        ├── Screenshot 2025-06-13 at 9.17.27 AM.png → (symlink to original)
+        ├── Screenshot 2025-10-31 at 10.04.32 AM.png → (symlink to original)
+        └── ...
+```
+
+By default, the results folder is created inside the first search directory. You can change this:
+
+```bash
+# Save results to a specific folder
+swift image_search.swift --results-dir ~/Desktop/my-results "invoice"
+
+# Open results in Finder automatically
+swift image_search.swift --open "error message"
+
+# Skip creating a results folder entirely (terminal output only)
+swift image_search.swift --no-results-dir "receipt"
+```
+
+> **Note:** Results folders contain only symlinks — your original images are never moved or copied.
 
 ## Supported Formats
 
