@@ -63,6 +63,37 @@ Found in **< 1 second** (cached). That's it.
 
 ## Quick Start
 
+Two ways to use it — pick whichever fits your workflow:
+
+### Option A: Use with Claude Code
+
+If you use [Claude Code](https://docs.anthropic.com/en/docs/claude-code), install it as a skill and search with natural language:
+
+```bash
+# Clone and install the skill
+git clone https://github.com/dpoint01/mac-image-search.git
+cd mac-image-search
+mkdir -p ~/.claude/skills/image-search/scripts
+cp image_search.swift ~/.claude/skills/image-search/scripts/
+cp claude-code/SKILL.md ~/.claude/skills/image-search/
+```
+
+Then in Claude Code:
+```
+> search my screenshots for "meeting notes"
+> find images containing "error" in my Downloads folder
+> /image-search quarterly report
+```
+
+To auto-approve (no confirmation prompts), add to `~/.claude/settings.local.json` under `permissions.allow`:
+```json
+"Bash(swift ~/.claude/skills/image-search/scripts/image_search.swift:*)"
+```
+
+### Option B: Use directly with Swift
+
+No Claude Code needed. Just run the script from your terminal:
+
 ```bash
 git clone https://github.com/dpoint01/mac-image-search.git
 cd mac-image-search
@@ -70,6 +101,8 @@ swift image_search.swift "your search term"
 ```
 
 No `brew install`. No `pip install`. No `npm install`. Just `swift` — which is already on your Mac.
+
+---
 
 ## How It Works
 
@@ -166,23 +199,6 @@ The OCR cache (`.ocr_cache.json`) maps each file to its recognized text and last
 - **Force rebuild** — `--rebuild` to re-OCR everything
 - **Disable** — `--no-cache` for one-off searches
 - **Safe to delete** — it rebuilds automatically
-
-## Use with Claude Code
-
-This repo includes a ready-to-use [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill:
-
-```bash
-mkdir -p ~/.claude/skills/image-search/scripts
-cp image_search.swift ~/.claude/skills/image-search/scripts/
-cp claude-code/SKILL.md ~/.claude/skills/image-search/
-```
-
-Then just say *"search my screenshots for meeting notes"* or invoke `/image-search meeting notes`.
-
-To auto-approve, add to `~/.claude/settings.local.json`:
-```json
-"Bash(swift ~/.claude/skills/image-search/scripts/image_search.swift:*)"
-```
 
 ## Security & Privacy
 
